@@ -1,5 +1,6 @@
 {
   "metadata_file": "[PATH]/metadata.csv",
   "plot_directory": "[PATH]/plots",
-  "objects_directory": "[PATH]/objects"
+  "objects_directory": "[PATH]/objects",
+  "threads":5
 }
