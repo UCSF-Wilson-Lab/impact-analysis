@@ -43,33 +43,56 @@ fh_raw_seurat_obj <- file.path(objects_dir,"seurat_obj.combined.RData")
 options(future.globals.maxSize= 891289600)
 
 
-# 1. Separate samples by batch ----
+# 1. Separate samples by batch/assay ----
 
-run_metadata_list <- split(metadata,metadata$run)
+# create batch:[gex/csf/multi] column
+metadata$run_group <- paste(metadata$run,metadata$type,sep = ":")
+metadata_gex       <- metadata[metadata$type %in% c("counts","counts_gex"),]
+metadata_csp       <- metadata[metadata$type %in% c("counts","counts_csp"),]
+
+
+run_metadata_gex_list <- split(metadata_gex,metadata_gex$run_group)
+run_metadata_csp_list <- split(metadata_csp,metadata_csp$run_group)
 
 
 # 2. Create Seurat Objects for each batch
 
-makeRunInputMtx <- function(runID ,run_metadata_list,THREADS) {
+# makeRunInputMtx
+# - output.type = c("gex","csp")
+makeRunInputMtx <- function(runID ,run_metadata_list,THREADS,output.type = "gex") {
+  run          <- tstrsplit(runID,":")[[1]]
+  type         <- tstrsplit(runID,":")[[2]]
+  multi.status <- FALSE
+  if(type == "counts"){
+    multi.status <- TRUE
+  }
+  
   run_metadata <- run_metadata_list[[runID]]
-  run_metadata <- run_metadata[run_metadata$type %in% "counts",]
+  run_metadata <- run_metadata[run_metadata$type %in% type,]
   
   # Get run directory and sample vector
   sample_dir_vec <- run_metadata$results_directory_path
   dataset_loc    <- tstrsplit(sample_dir_vec,"multi_counts/")[[1]] %>% unique()
   dataset_loc    <- paste(dataset_loc,"multi_counts/",sep = "")
   
+  # Separate samples based on whether they are mult, gex only or csp only
   samples.vec   <- run_metadata$sample
   
   if(THREADS > length(samples.vec)){
     THREADS <- length(samples.vec)
   }
-  gex.matrix <- generateCombinedMatrix(dataset_loc, samples.vec,THREADS = THREADS,multi.results = T,
-                                       assay = "gex",min.genes.per.cell = 700,max.genes.per.cell = NULL)
+  gex.matrix <- generateCombinedMatrix(dataset_loc, samples.vec,THREADS = THREADS,multi.results = multi.status,
+                                       assay = output.type,min.genes.per.cell = 700,max.genes.per.cell = NULL)
   
+  return(gex.matrix)
 }
 
-run_list <- names(run_metadata_list) %>% as.list()
-obj_list <- lapply(run_list, makeRunInputMtx,run_metadata_list=run_metadata_list,THREADS=THREADS)
+gex_run_list <- names(run_metadata_gex_list) %>% as.list()
+csp_run_list <- names(run_metadata_csp_list) %>% as.list()
+
+csp_mtx_list <- lapply(csp_run_list, makeRunInputMtx,
+                       run_metadata_list=run_metadata_csp_list,
+                       THREADS=THREADS,output.type = "csp")
+
 
 
