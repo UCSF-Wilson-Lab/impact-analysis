@@ -94,6 +94,14 @@ makeRunInputMtx <- function(runID ,run_metadata_list,THREADS,
 gex_run_list <- names(run_metadata_gex_list) %>% as.list()
 csp_run_list <- names(run_metadata_csp_list) %>% as.list()
 
+# Initialize variables
+dataset_loc        <- ""
+samples.vec        <- c()
+multi.results      <- NULL
+assay              <- NULL
+min.genes.per.cell <- NULL
+max.genes.per.cell <- NULL
+
 # CSP input matrix
 csp_mtx_list <- lapply(csp_run_list, makeRunInputMtx,
                        run_metadata_list=run_metadata_csp_list,
