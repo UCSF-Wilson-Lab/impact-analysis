@@ -1,0 +1,186 @@
+---
+title: "Filter scRNA-Seq and VDJ data"
+output: html_document
+date: "2024-07-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# START
+* Workflow for processing combined analysis object
+* Prior to running this code set working directory to 'impact-analysis/code'
+
+```{r,warning=F,message=F}
+# Set Working Directory before starting
+
+# Immcantation
+suppressPackageStartupMessages(library(alakazam))
+suppressPackageStartupMessages(library(shazam))
+suppressPackageStartupMessages(library(tigger))
+suppressPackageStartupMessages(library(dowser))
+suppressPackageStartupMessages(library(airr))
+
+suppressPackageStartupMessages(library(rjson))
+suppressPackageStartupMessages(library(glmGamPoi))
+suppressPackageStartupMessages(library(Seurat))
+suppressPackageStartupMessages(library(dittoSeq))
+suppressPackageStartupMessages(library(reshape2))
+suppressPackageStartupMessages(library(kableExtra))
+suppressPackageStartupMessages(library(devtools))
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(cowplot))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(impactSingleCellToolkit))
+
+# Increase size of ENV
+options(future.globals.maxSize= 891289600)
+set.seed(12345)
+```
+
+
+# 1. Load inputs
+
+### a. params
+```{r}
+# INPUT and OUTPUT Directories
+param_file_fh = "../input/input_one_patient_analysis.json"
+params        = fromJSON(file = param_file_fh)
+
+# INPUT
+metadata_fh   = params$metadata_file
+metadata      = read.csv(metadata_fh,stringsAsFactors = F,check.names = F)
+THREADS       = params$threads
+
+# subset metadata
+metadata_gex  <- metadata[metadata$type %in% c("counts_gex"),]
+metadata_bcr  <- metadata[metadata$type %in% c("vdj_b"),]
+metadata_tcr  <- metadata[metadata$type %in% c("vdj_t"),]
+
+# OUTPUT Results Directories
+plot_dir     = params$plot_directory
+objects_dir  = params$objects_directory
+if(!file.exists(plot_dir)){dir.create(plot_dir,recursive = TRUE)}
+if(!file.exists(objects_dir)){dir.create(objects_dir,recursive = TRUE)}
+```
+
+### b. processed GEX/CSP object
+```{r}
+fh_processed_seurat_obj <- file.path(objects_dir,"seurat_obj.processed.rds")
+rnaseq_obj              <- readRDS(fh_processed_seurat_obj)
+```
+
+
+# 2. Load and format TCR/BCR repertoire results
+* Clonotype definitions for BCR are based on the Heavy chain only
+  * Plots CDR3 distance distribution among BCRs and come up with a new threshold
+* Clonotype definitions for TCR include both Alpha and Beta chains
+
+### a. Load Immcantation Results
+```{r}
+# File paths
+bcr_heavy_fh <- "../../Results/results_immcantation_one_patient/BCR_CSFPB/BCR_CSFPB_heavy_germ-pass.tsv"
+bcr_light_fh <- "../../Results/results_immcantation_one_patient/BCR_CSFPB/BCR_CSFPB_light_germ-pass.tsv"
+tcr_beta_fh  <- "../../Results/results_immcantation_one_patient/TCR_CSFPB/TCR_CSFPB_heavy_germ-pass.tsv"
+tcr_alpha_fh <- "../../Results/results_immcantation_one_patient/TCR_CSFPB/TCR_CSFPB_light_germ-pass.tsv"
+
+# TCR
+db.tra   <- read_rearrangement(tcr_alpha_fh) %>% as.data.frame()
+db.trb   <- read_rearrangement(tcr_beta_fh) %>% as.data.frame()
+# BCR
+db.heavy <- read_rearrangement(bcr_heavy_fh) %>% as.data.frame()
+db.light <- read_rearrangement(bcr_light_fh) %>% as.data.frame()
+```
+
+### b. filter contigs and merge all chains
+* All contigs are in frame
+```{r}
+bcr_df <- mergeVDJresults(db.heavy,db.light,umi.thresh = 3,assay = "bcr")
+tcr_df <- mergeVDJresults(db.trb,db.tra,umi.thresh = 2, assay = "tcr")
+
+# format VDJ unique cell IDs to match scRNA-Seq (function only for this workshop)
+formatUniqueIDcolum <- function(uni_id_column,sep = ":") {
+  samples <- tstrsplit(uni_id_column, sep)[[1]]
+  cells   <- tstrsplit(uni_id_column, sep)[[2]]
+  fmt_ids <- paste(cells,samples,sep = "-")
+  
+  return(fmt_ids)
+}
+
+bcr_df$unique_cell_id <- formatUniqueIDcolum(bcr_df$unique_cell_id)
+tcr_df$unique_cell_id <- formatUniqueIDcolum(tcr_df$unique_cell_id)
+```
+
+
+# 3. Only analyze cells shared across all datasets
+
+### a. get vector of overlapping cells
+```{r}
+cells_rnaseq      <- colnames(rnaseq_obj)
+cells_vdj         <- unique(c(bcr_df$unique_cell_id,
+                              tcr_df$unique_cell_id))
+overlapping_cells <- cells_rnaseq[cells_rnaseq %in% cells_vdj]
+```
+
+
+### b. filter rna-seq and vdj data
+* Even after filtering for cells that overlap with BCR/TCR data, there are still sparse clusters of cells annotated as different cell types
+```{r,fig.height=6,fig.width=14}
+# generate UMAP of cell type annotations pre-filtering
+p1_pre_filter <- DimPlot(object = rnaseq_obj, group.by="predicted.celltype.l1", pt.size=1.0, label.size = 5, alpha = 0.7,label = T,reduction = "umap")
+
+# only keep cells with vdj
+rnaseq_obj     <- rnaseq_obj[,colnames(rnaseq_obj) %in% overlapping_cells]
+bcr_df         <- bcr_df[bcr_df$unique_cell_id %in% overlapping_cells,]
+tcr_df         <- tcr_df[tcr_df$unique_cell_id %in% overlapping_cells,]
+
+# post filter umap
+p2_post_filter <- DimPlot(object = rnaseq_obj, group.by="predicted.celltype.l1", pt.size=1.0, label.size = 5, alpha = 0.7,label = T,reduction = "umap")
+
+plot_grid(p1_pre_filter,p2_post_filter,ncol = 2)
+```
+
+
+# 4. Add metadata columns to GEX and VDJ data
+
+### a. rnaseq object
+```{r}
+createMetadataColumn <- function(sample_vec, metadata,sample.col = "sample",meta.col = "SampleType") {
+  new_col <- sample_vec
+  uni_labels <- metadata[,meta.col] %>% unique()
+  
+  for (categ in uni_labels) {
+    categ_samples <- metadata[metadata[,meta.col] %in% categ,sample.col] %>% unique()
+    new_col[new_col %in% categ_samples] <- categ
+  }
+  
+  return(new_col)
+}
+
+rnaseq_obj@meta.data$compartment <- createMetadataColumn(rnaseq_obj@meta.data$sample,metadata = metadata_gex,meta.col = "SampleType" )
+rnaseq_obj@meta.data$status <- createMetadataColumn(rnaseq_obj@meta.data$sample,metadata = metadata_gex,meta.col = "Project" )
+```
+
+### b. VDJ
+```{r}
+# Add sample column
+tcr_df$sample <- tstrsplit(tcr_df$unique_cell_id,"-")[[2]]
+bcr_df$sample <- tstrsplit(bcr_df$unique_cell_id,"-")[[2]]
+
+# Add column for Compartment
+tcr_df$COMPARTMENT <- createMetadataColumn(tcr_df$sample,metadata = metadata_tcr,meta.col = "SampleType" )
+bcr_df$COMPARTMENT <- createMetadataColumn(bcr_df$sample,metadata = metadata_bcr,meta.col = "SampleType" )
+
+# Sample status
+tcr_df$STATUS <- createMetadataColumn(tcr_df$sample,metadata = metadata_tcr,meta.col = "Project" )
+bcr_df$STATUS <- createMetadataColumn(bcr_df$sample,metadata = metadata_bcr,meta.col = "Project" )
+```
+
+
+# 5. Re-cluster
+
+
