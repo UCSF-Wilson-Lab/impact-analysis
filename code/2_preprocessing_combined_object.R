@@ -135,5 +135,31 @@ print(l2_cell_annot_azimuth)
 dev.off()
 
 
+# 6. Process CSP part of object ----
+DefaultAssay(seurat.obj) <- "CSP" # it should be 'SCT' after processing the GEX data
+
+### Normalize
+seurat.obj <- NormalizeData(seurat.obj, normalization.method = "CLR", margin = 2, assay = "CSP")
+### Run PCA
+VariableFeatures(seurat.obj) = rownames(seurat.obj@assays[["CSP"]])
+seurat.obj = seurat.obj %>% 
+  ScaleData(verbose=F) %>%
+  RunPCA(reduction.name="apca",approx=F, verbose=F) 
+### Pick PCs
+total_variance <- sum(matrixStats::rowVars(
+  as.matrix(seurat.obj@assays[["CSP"]]@scale.data)))
+eigValues = (seurat.obj@reductions$apca@stdev)^2  
+varExplained = eigValues / total_variance
+csp_pc_plot <- plot(varExplained)
+### Run UMAP
+seurat.obj <- RunUMAP(seurat.obj, 
+              reduction = 'apca', 
+              dims = 1:12, 
+              assay = 'CSP', 
+              reduction.name = 'csp.umap', 
+              reduction.key = 'cspUMAP_',
+              verbose = F)
+
 # SAVE ----
+DefaultAssay(seurat.obj) <- "SCT"
 saveRDS(seurat.obj,file = fh_processed_seurat_obj)
