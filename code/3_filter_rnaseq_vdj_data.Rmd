@@ -183,4 +183,94 @@ bcr_df$STATUS <- createMetadataColumn(bcr_df$sample,metadata = metadata_bcr,meta
 
 # 5. Re-cluster
 
+### a. SCT
+```{r}
+# Re-cluster
+opt_pcs    <- plotOptimalPCsforSeuratObject(rnaseq_obj)
+rnaseq_obj <- scaleAndClusterSeuratObject(rnaseq_obj,dims = 1:11,npca = 11,resolution = 0.8,
+                                          normalize = F,dim.reduction = T)
+
+# Plot
+reclus_umap1 <- dittoDimPlot(rnaseq_obj, assay="RNA", reduction="umap", var="predicted.celltype.l1")
+reclus_umap2 <- dittoDimPlot(rnaseq_obj, assay="RNA", reduction="umap", var="seurat_clusters")
+
+plot_grid(reclus_umap1,reclus_umap2,ncol = 2)
+```
+
+### b. CSP
+```{r}
+# Re-cluster
+DefaultAssay(rnaseq_obj) <- "CSP" # it should be 'SCT' after processing the GEX data
+
+### Run PCA
+VariableFeatures(rnaseq_obj) = rownames(rnaseq_obj@assays[["CSP"]])
+rnaseq_obj = rnaseq_obj %>% 
+  RunPCA(reduction.name="apca",approx=F, verbose=F) 
+### Run UMAP
+rnaseq_obj <- RunUMAP(rnaseq_obj, 
+              reduction = 'apca', 
+              dims = 1:6, 
+              assay = 'CSP', 
+              reduction.name = 'csp.umap', 
+              reduction.key = 'cspUMAP_',
+              verbose = F)
+
+DefaultAssay(rnaseq_obj) <- "SCT"
+
+
+# Plot 
+reclus_csp_umap1 <- dittoDimPlot(rnaseq_obj, assay="CSP", reduction="csp.umap", var="predicted.celltype.l1")
+reclus_csp_umap2 <- dittoDimPlot(rnaseq_obj, assay="CSP", reduction="csp.umap", var="seurat_clusters")
+
+
+plot_grid(reclus_csp_umap1,reclus_csp_umap2,ncol = 2)
+```
+
+# 6. WNN to get multi-omics clusters
+```{r}
+#DefaultAssay(rnaseq_obj)
+
+rnaseq_obj <- FindMultiModalNeighbors(
+  rnaseq_obj, 
+  reduction.list = list("pca", "apca"), # RNA and CSP
+  dims.list = list(1:11, 1:6),
+  k.nn = 20,
+  prune.SNN = 1/15 
+)
+
+rnaseq_obj <- RunUMAP(rnaseq_obj, 
+              nn.name = "weighted.nn", 
+              reduction.name = "wnn.umap", 
+              reduction.key = "wnnUMAP_",
+              verbose=F)
+rnaseq_obj <- FindClusters(rnaseq_obj, 
+                   graph.name = "wsnn", 
+                   algorithm = 3,
+                   resolution = 2, 
+                   verbose = F, 
+                   random.seed = 12345)
+
+rnaseq_obj@meta.data$wsnn_cluster = rnaseq_obj@meta.data$wsnn_res.2
+```
+
+
+# 7. Explore differences in the clustering
+
+### a. clusters - plot all 3 UMAPs
+```{r}
+p1 = dittoDimPlot(rnaseq_obj, var="wsnn_cluster", reduction="wnn.umap")+NoLegend()
+p2 = dittoDimPlot(rnaseq_obj, var="wsnn_cluster", reduction="csp.umap")+NoLegend()
+p3 = dittoDimPlot(rnaseq_obj, var="wsnn_cluster", reduction="umap")+NoLegend()+xlab("rnaUMAP_1")+ylab("rnaUMAP_2")
+
+plot_grid(p1, p2, p3, ncol=3)
+```
+
+### b. celltype - plot all 3 UMAPs
+```{r,fig.height=5, fig.width=15}
+c1 = dittoDimPlot(rnaseq_obj, var="predicted.celltype.l1", reduction="wnn.umap")
+c2 = dittoDimPlot(rnaseq_obj, var="predicted.celltype.l1", reduction="csp.umap")
+c3 = dittoDimPlot(rnaseq_obj, var="predicted.celltype.l1", reduction="umap")+xlab("rnaUMAP_1")+ylab("rnaUMAP_2")
+
+plot_grid(c1, c2, c3, ncol=3)
+```
 
