@@ -274,3 +274,91 @@ c3 = dittoDimPlot(rnaseq_obj, var="predicted.celltype.l1", reduction="umap")+xla
 plot_grid(c1, c2, c3, ncol=3)
 ```
 
+# 8. Separate B & T cells using VDJ
+```{r}
+# Add column separating BCR and TCR
+vdj_status <- row.names(rnaseq_obj@meta.data)
+vdj_status[vdj_status %in% unique(bcr_df$unique_cell_id)] <- "BCR"
+vdj_status[vdj_status %in% unique(tcr_df$unique_cell_id)] <- "TCR"
+rnaseq_obj$vdj_status <- vdj_status
+
+bcell_cell_ids <- row.names(rnaseq_obj@meta.data[rnaseq_obj@meta.data$vdj_status %in% "BCR",])
+tcell_cell_ids <- row.names(rnaseq_obj@meta.data[rnaseq_obj@meta.data$vdj_status %in% "TCR",])
+
+# separate B and T cells for RNA-Seq
+bcell_obj     <- rnaseq_obj[,colnames(rnaseq_obj) %in% bcell_cell_ids]
+tcell_obj     <- rnaseq_obj[,colnames(rnaseq_obj) %in% tcell_cell_ids]
+```
+
+
+# 9. Plot B/T cells
+
+### a. B cells
+```{r,fig.height=5, fig.width=15}
+b1 = dittoDimPlot(bcell_obj, var="predicted.celltype.l1", reduction="wnn.umap")
+b2 = dittoDimPlot(bcell_obj, var="predicted.celltype.l1", reduction="csp.umap")
+b3 = dittoDimPlot(bcell_obj, var="predicted.celltype.l1", reduction="umap")+xlab("rnaUMAP_1")+ylab("rnaUMAP_2")
+
+plot_grid(b1, b2, b3, ncol=3)
+```
+
+### b. T cells
+```{r,fig.height=5, fig.width=15}
+t1 = dittoDimPlot(tcell_obj, var="predicted.celltype.l1", reduction="wnn.umap")
+t2 = dittoDimPlot(tcell_obj, var="predicted.celltype.l1", reduction="csp.umap")
+t3 = dittoDimPlot(tcell_obj, var="predicted.celltype.l1", reduction="umap")+xlab("rnaUMAP_1")+ylab("rnaUMAP_2")
+
+plot_grid(t1, t2, t3, ncol=3)
+```
+
+# 10. Assess hamming distances among BCR data
+* These results suggest we should run the full cohort through immcantation and subset the results as needed
+* This would make the automated threshold for B cells more reliable, otherwise the distribution is too sparse
+
+### a. generate plots
+```{r}
+bcr_results_igh <- bcr_df[bcr_df$locus %in% "IGH",]
+dist_nearest    <- distToNearest(bcr_results_igh)
+
+# Automated Threshold - will take a long time with the full cohort
+# - Threshold setting occurs by default when running the immcantation pipeline
+threshold_output <- shazam::findThreshold(dist_nearest$dist_nearest,
+                                  method = "gmm", model = "gamma-norm",
+                                  cutoff = "user",spc = 0.99)
+threshold <- threshold_output@threshold
+
+p_ham_auto <- plot(threshold_output, binwidth = 0.02, silent = TRUE) + theme(axis.title = element_text(size = 18))
+
+# generate Hamming distance histogram
+p_ham <- ggplot2::ggplot(subset(dist_nearest, !is.na(dist_nearest)),
+             aes(x = dist_nearest)) +
+        geom_histogram(color = "white", binwidth = 0.02) +
+        labs(x = "Hamming distance", y = "Count") +
+        scale_x_continuous(breaks = seq(0, 1, 0.1)) +
+        theme_bw() +
+        theme(axis.title = element_text(size = 18)) + geom_vline(xintercept=0.15, linetype = "longdash",color = "red")
+
+plot(p_ham)
+plot(p_ham_auto)
+```
+
+### b. PDF
+```{r}
+ham_plot_file_name <- paste("distn_hamming_CDR3_auto_thresh_",threshold,".pdf",sep = "")
+pdf(file = file.path(plot_dir,ham_plot_file_name),height = 5,width = 7)
+plot(p_ham_auto)
+dev.off()
+```
+
+
+# Save Objects
+```{r}
+# B and T cell Objects
+saveRDS(bcell_obj,file = file.path(objects_dir,"bcell_seurat_obj.rds"))
+saveRDS(tcell_obj,file = file.path(objects_dir,"tcell_seurat_obj.rds"))
+
+# Filtered VDJ results
+save(bcr_df,tcr_df,threshold_output,file = file.path(objects_dir,"vdj_results.processed.RData"))
+```
+
+
