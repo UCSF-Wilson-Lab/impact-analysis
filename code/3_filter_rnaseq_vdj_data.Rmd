@@ -83,8 +83,8 @@ full_rnaseq_obj         <- readRDS(fh_processed_seurat_obj)
 ### a. Load Immcantation Results
 ```{r}
 # File paths
-bcr_heavy_fh <- "../../Results/results_immcantation_one_patient/BCR_CSFPB/BCR_CSFPB_heavy_germ-pass.tsv"
-bcr_light_fh <- "../../Results/results_immcantation_one_patient/BCR_CSFPB/BCR_CSFPB_light_germ-pass.tsv"
+bcr_heavy_fh <- "../../Results/results_immcantation_full_cohort/BCR_CSFPB/BCR_CSFPB_heavy_germ-pass.tsv"
+bcr_light_fh <- "../../Results/results_immcantation_full_cohort/BCR_CSFPB/BCR_CSFPB_light_germ-pass.tsv"
 tcr_beta_fh  <- "../../Results/results_immcantation_one_patient/TCR_CSFPB/TCR_CSFPB_heavy_germ-pass.tsv"
 tcr_alpha_fh <- "../../Results/results_immcantation_one_patient/TCR_CSFPB/TCR_CSFPB_light_germ-pass.tsv"
 
