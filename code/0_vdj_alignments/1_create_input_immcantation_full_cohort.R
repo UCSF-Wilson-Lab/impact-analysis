@@ -43,9 +43,21 @@ for (sample in names(bcr_list)) {
   sample_dir  <- bcr_list[[sample]]
   symlink_dir <- file.path(vdj_bcr_dir,sample)
   
+  # Confirm filtered annotations file is not empty
+  filtered_results_exist <- TRUE
+  files        <- list.files(sample_dir)
+  filtered_csv <- files[grep("\\.csv",files)]
+  filtered_csv <- filtered_csv[grep("filtered",filtered_csv)]
+  info         <- file.info(file.path(sample_dir,filtered_csv))
+  if(info$size == as.integer(0)){
+    filtered_results_exist <- FALSE
+  }
+  
   # Create the symbolic link
   if(!file.exists(symlink_dir)){
-    system(paste("ln -s", sample_dir, symlink_dir))
+    if(filtered_results_exist){
+      system(paste("ln -s", sample_dir, symlink_dir))
+    }
   }
 }
 
@@ -58,9 +70,21 @@ for (sample in names(tcr_list)) {
   sample_dir  <- tcr_list[[sample]]
   symlink_dir <- file.path(vdj_tcr_dir,sample)
   
+  # Confirm filtered annotations file is not empty
+  filtered_results_exist <- TRUE
+  files        <- list.files(sample_dir)
+  filtered_csv <- files[grep("\\.csv",files)]
+  filtered_csv <- filtered_csv[grep("filtered",filtered_csv)]
+  info         <- file.info(file.path(sample_dir,filtered_csv))
+  if(info$size == as.integer(0)){
+    filtered_results_exist <- FALSE
+  }
+  
   # Create the symbolic link
   if(!file.exists(symlink_dir)){
-    system(paste("ln -s", sample_dir, symlink_dir))
+    if(filtered_results_exist){
+      system(paste("ln -s", sample_dir, symlink_dir))
+    }
   }
 }
 
