@@ -76,12 +76,14 @@ runAmbientRNAfilterAndOuputFiles <- function(raw_hd5_fh,filt_hd5_fh,output_dir) 
   adj_matrix  <- adjustCounts(soup_channel, roundToInt = T)
   
   # Output
-  DropletUtils:::write10xCounts(output_dir, adj_matrix, version = "3")
+  DropletUtils:::write10xCounts(output_dir, adj_matrix, version = "3",overwrite = TRUE)
 }
 
 
 ### preprocessCountsUsingMetadata ----
-preprocessCountsUsingMetadata <- function(sample,metadata_counts,ambient.rna.filter = TRUE) {
+preprocessCountsUsingMetadata <- function(sample,metadata_counts,threads = 1,
+                                          ambient.rna.filter = TRUE,output.type = "gex",
+                                          min.genes.gex=700,multi.status=TRUE) {
   metadata_sample <- metadata_counts[metadata_counts$sample %in% sample,]
   counts_dir      <- metadata_sample$results_directory_path
   hd5_dir         <- metadata_sample$path_hd5
@@ -89,24 +91,49 @@ preprocessCountsUsingMetadata <- function(sample,metadata_counts,ambient.rna.fil
   
   # Directory to read in and apply filters and doublet removal
   input_dir <- counts_dir
-  if(ambient.rna.filter){input_dir <- counts_filt_dir}
+  if(ambient.rna.filter){input_dir    <- counts_filt_dir}
+  if(ambient.rna.filter){multi.status <- FALSE} # Post ambient RNA filter, the output is in a non-multi format
   
   # If performing ambient RNA filter output results to filtered counts folder
   if(ambient.rna.filter){
     raw_mtx_fh  <- file.path(hd5_dir,"raw_feature_bc_matrix.h5")
     filt_mtx_fh <- file.path(hd5_dir,"sample_filtered_feature_bc_matrix.h5")
     
-    if(! dir.exists(counts_filt_dir)){
-      runAmbientRNAfilterAndOuputFiles(raw_hd5_fh = raw_mtx_fh,
-                                       filt_hd5_fh = filt_mtx_fh,
-                                       output_dir = counts_filt_dir)
-    }
+    runAmbientRNAfilterAndOuputFiles(raw_hd5_fh = raw_mtx_fh,
+                                     filt_hd5_fh = filt_mtx_fh,
+                                     output_dir = counts_filt_dir)
   }
   
-  # Gene count filter
+  # Gene count filter on input sample matrix
+  dataset_loc <- tstrsplit(input_dir,sample)[[1]]
+  gex.matrix <- generateCombinedMatrix(dataset_loc, samples.vec = sample,THREADS = 1,
+                                       multi.results = multi.status,assay = output.type,
+                                       min.genes.per.cell = min.genes.gex,max.genes.per.cell = NULL)
+  
+  # Create Seurat Object
+  seurat.obj <- createSeuratObjectFromMatrix(
+    sc.data      = gex.matrix,
+    project.name = "GEX_one_sample",
+    npca         = 20, min.genes = min.genes.gex,
+    normalize = F,dim.reduction = F
+  )
+  
+  # Add samples column
+  cells      <- row.names(seurat.obj@meta.data)
+  sample_col <- cells
+  sample_col <- tstrsplit(sample_col,"-")[[2]]
+  seurat.obj@meta.data$sample <- sample_col
   
   # Doublet removal
+  seurat.obj <- findDoublets(seurat.obj,sample.col = "sample",threads = threads)
   
+  # Omit Doublets 
+  cells_to_keep  <- names(seurat.obj$doublet_finder[seurat.obj$doublet_finder %in% "Singlet"])
+  seurat.obj     <- seurat.obj[,colnames(seurat.obj) %in% cells_to_keep]
+  
+  # Write output files
+  counts_matrix_processed <- seurat.obj[["RNA"]]$counts
+  DropletUtils:::write10xCounts(input_dir, counts_matrix_processed, version = "3",overwrite = TRUE)
 }
 
 
@@ -115,9 +142,17 @@ metadata_counts <- metadata[metadata$type %in% "counts",]
 metadata_counts$path_hd5 <- str_replace_all(metadata_counts$results_directory_path,"\\/multi_counts\\/","/multi_counts_hd5/")
 metadata_counts$path_counts_filt <- str_replace_all(metadata_counts$results_directory_path,"\\/multi_counts\\/","/multi_counts_filt/")
 
-
 samples <- metadata_counts$sample
+
+# 2. Initialize variables used in nested functions ----
+dataset_loc        <- ""
+samples.vec        <- c()
+multi.results      <- NULL
+assay              <- NULL
+min.genes.per.cell <- NULL
+max.genes.per.cell <- NULL
 
 # 2. loop through samples and pre-process ----
 lapply(as.list(samples), preprocessCountsUsingMetadata,
-       metadata_counts=metadata_counts,ambient.rna.filter=TRUE)
+       metadata_counts=metadata_counts,threads = THREADS,ambient.rna.filter=TRUE,
+       output.type="gex",min.genes.gex=700,multi.status=TRUE)
