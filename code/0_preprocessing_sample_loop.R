@@ -28,13 +28,13 @@ library(DropletUtils)
 # INPUT and OUTPUT Directories
 # 0_preprocessing_sample_loop.R  [Param File]
 
-#args = commandArgs(trailingOnly=TRUE)
-#if (length(args)!=1) {
-#  stop("ERROR: At least one argument must be supplied (JSON parameter file).json", call.=FALSE)
-#} 
-#param_file_fh = args[1]
+args = commandArgs(trailingOnly=TRUE)
+if (length(args)!=1) {
+  stop("ERROR: At least one argument must be supplied (JSON parameter file).json", call.=FALSE)
+} 
+param_file_fh = args[1]
 
-param_file_fh = "../input/input_small_patient_subset_analysis.json"
+#param_file_fh = "../input/input_full_cohort_analysis.json"
 params        = fromJSON(file = param_file_fh)
 
 # INPUT
@@ -83,11 +83,17 @@ runAmbientRNAfilterAndOuputFiles <- function(raw_hd5_fh,filt_hd5_fh,output_dir) 
 ### preprocessCountsUsingMetadata ----
 preprocessCountsUsingMetadata <- function(sample,metadata_counts,threads = 1,
                                           ambient.rna.filter = TRUE,output.type = "gex",
-                                          min.genes.gex=700,multi.status=TRUE) {
+                                          min.genes.gex=400,multi.status=TRUE) {
   metadata_sample <- metadata_counts[metadata_counts$sample %in% sample,]
   counts_dir      <- metadata_sample$results_directory_path
   hd5_dir         <- metadata_sample$path_hd5
   counts_filt_dir <- metadata_sample$path_counts_filt
+  
+  # Change multi status based on count type
+  count_type      <- metadata_sample$type
+  if(output.type == "gex"){
+    if(count_type == "counts_gex"){multi.status <- FALSE}
+  }
   
   # Directory to read in and apply filters and doublet removal
   input_dir <- counts_dir
@@ -134,11 +140,13 @@ preprocessCountsUsingMetadata <- function(sample,metadata_counts,threads = 1,
   # Write output files
   counts_matrix_processed <- seurat.obj[["RNA"]]$counts
   DropletUtils:::write10xCounts(input_dir, counts_matrix_processed, version = "3",overwrite = TRUE)
+  
+  # Create a sample entry
 }
 
 
 # 1. list samples ----
-metadata_counts <- metadata[metadata$type %in% "counts",]
+metadata_counts <- metadata[metadata$type %in% c("counts","counts_gex"),]
 metadata_counts$path_hd5 <- str_replace_all(metadata_counts$results_directory_path,"\\/multi_counts\\/","/multi_counts_hd5/")
 metadata_counts$path_counts_filt <- str_replace_all(metadata_counts$results_directory_path,"\\/multi_counts\\/","/multi_counts_filt/")
 
@@ -155,4 +163,4 @@ max.genes.per.cell <- NULL
 # 2. loop through samples and pre-process ----
 lapply(as.list(samples), preprocessCountsUsingMetadata,
        metadata_counts=metadata_counts,threads = THREADS,ambient.rna.filter=TRUE,
-       output.type="gex",min.genes.gex=700,multi.status=TRUE)
+       output.type="gex",min.genes.gex=400,multi.status=TRUE)
