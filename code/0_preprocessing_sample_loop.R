@@ -138,7 +138,7 @@ preprocessCountsUsingMetadata <- function(sample,metadata_counts,threads = 1,
   seurat.obj     <- seurat.obj[,colnames(seurat.obj) %in% cells_to_keep]
   
   # Write output files
-  counts_matrix_processed <- seurat.obj[["RNA"]]$counts
+  counts_matrix_processed <- gex.matrix[,colnames(gex.matrix) %in% colnames(seurat.obj)]
   DropletUtils:::write10xCounts(input_dir, counts_matrix_processed, version = "3",overwrite = TRUE)
   
   # Create a sample entry
