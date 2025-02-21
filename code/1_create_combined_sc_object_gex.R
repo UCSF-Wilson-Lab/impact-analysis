@@ -116,10 +116,10 @@ merged_gex_mtx <- do.call("cbind",gex_mtx_list)
 
 
 
-# 3. Create Seurat Objects for GEX and CSP ----
+# 3. Create Seurat Objects for GEX ----
 seurat.obj <- createSeuratObjectFromMatrix(
   sc.data      = merged_gex_mtx,
-  project.name = "GEX_IMPACT_OnePatient",
+  project.name = "GEX_IMPACT",
   npca         = 20, min.genes = 400,
   normalize = F,dim.reduction = F
 )
@@ -143,6 +143,10 @@ seurat.obj     <- seurat.obj[,colnames(seurat.obj) %in% cells_to_keep]
 if(use.filtered.gex == FALSE){
   set.seed(1234)
   seurat.obj <- findDoublets(seurat.obj,sample.col = "sample",threads = THREADS)
+  
+  # Omit Doublets 
+  cells_to_keep  <- names(seurat.obj$doublet_finder[seurat.obj$doublet_finder %in% "Singlet"])
+  seurat.obj     <- seurat.obj[,colnames(seurat.obj) %in% cells_to_keep]
 }
 
 

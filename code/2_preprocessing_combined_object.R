@@ -38,7 +38,7 @@ if(!file.exists(plot_dir)){dir.create(plot_dir,recursive = TRUE)}
 if(!file.exists(objects_dir)){dir.create(objects_dir,recursive = TRUE)}
 
 # Input and Output RData Objects
-fh_raw_seurat_obj       <- file.path(objects_dir,"seurat_obj.combined.RData")
+fh_raw_seurat_obj       <- file.path(objects_dir,"seurat_obj.combined.gex.RData")
 fh_processed_seurat_obj <- file.path(objects_dir,"seurat_obj.processed.rds")
 
 # Increase size of ENV
@@ -49,15 +49,22 @@ set.seed(112358)
 
 # 1. Load and start normalization/clustering ----
 
-# Load combined GEX/CSP object
+# Load combined GEX object
 load(fh_raw_seurat_obj)
 
-# Omit Doublets 
-cells_to_keep  <- names(seurat.obj$doublet_finder[seurat.obj$doublet_finder %in% "Singlet"])
-seurat.obj     <- seurat.obj[,colnames(seurat.obj) %in% cells_to_keep]
+# Normalization per sample
+seurat.obj.list <- SplitObject(seurat.obj, split.by="sample")
+seurat.obj.list <- lapply(X = seurat.obj.list, 
+                          FUN = SCTransform, 
+                          return.only.var.genes = FALSE)
+seurat.obj <- merge(seurat.obj.list[[1]], 
+                    y = seurat.obj.list[2:length(seurat.obj.list)], 
+                    add.cell.ids = names(seurat.obj.list))
+DefaultAssay(seurat.obj) <- "SCT"
+
 
 # Re-cluster
-seurat.obj   <- scaleAndClusterSeuratObject(seurat.obj,dims = 1:30,npca = 10,tsne = T)
+seurat.obj   <- scaleAndClusterSeuratObject(seurat.obj,normalize = T,dims = 1:30,npca = 10,tsne = T)
 pc_elbowplot <- plotOptimalPCsforSeuratObject(seurat.obj)
 
 # 2. Plot pre-batch correction and add in batch column ----
@@ -136,29 +143,35 @@ dev.off()
 
 
 # 6. Process CSP part of object ----
-DefaultAssay(seurat.obj) <- "CSP" # it should be 'SCT' after processing the GEX data
 
-### Normalize
-seurat.obj <- NormalizeData(seurat.obj, normalization.method = "CLR", margin = 2, assay = "CSP")
-### Run PCA
-VariableFeatures(seurat.obj) = rownames(seurat.obj@assays[["CSP"]])
-seurat.obj = seurat.obj %>% 
-  ScaleData(verbose=F) %>%
-  RunPCA(reduction.name="apca",approx=F, verbose=F) 
-### Pick PCs
-total_variance <- sum(matrixStats::rowVars(
-  as.matrix(seurat.obj@assays[["CSP"]]@scale.data)))
-eigValues = (seurat.obj@reductions$apca@stdev)^2  
-varExplained = eigValues / total_variance
-csp_pc_plot <- plot(varExplained)
-### Run UMAP
-seurat.obj <- RunUMAP(seurat.obj, 
-              reduction = 'apca', 
-              dims = 1:12, 
-              assay = 'CSP', 
-              reduction.name = 'csp.umap', 
-              reduction.key = 'cspUMAP_',
-              verbose = F)
+# This section is option depending on if Cite-Seq data are added in the object
+if("CSP" %in% names(seurat.obj)){
+  DefaultAssay(seurat.obj) <- "CSP" # it should be 'SCT' after processing the GEX data
+  
+  ### Normalize
+  seurat.obj <- NormalizeData(seurat.obj, normalization.method = "CLR", margin = 2, assay = "CSP")
+  ### Run PCA
+  VariableFeatures(seurat.obj) = rownames(seurat.obj@assays[["CSP"]])
+  seurat.obj = seurat.obj %>% 
+    ScaleData(verbose=F) %>%
+    RunPCA(reduction.name="apca",approx=F, verbose=F) 
+  ### Pick PCs
+  total_variance <- sum(matrixStats::rowVars(
+    as.matrix(seurat.obj@assays[["CSP"]]@scale.data)))
+  eigValues = (seurat.obj@reductions$apca@stdev)^2  
+  varExplained = eigValues / total_variance
+  csp_pc_plot <- plot(varExplained)
+  
+  ### Run UMAP
+  seurat.obj <- RunUMAP(seurat.obj, 
+                        reduction = 'apca', 
+                        dims = 1:12, 
+                        assay = 'CSP', 
+                        reduction.name = 'csp.umap', 
+                        reduction.key = 'cspUMAP_',
+                        verbose = F)
+}
+
 
 # SAVE ----
 DefaultAssay(seurat.obj) <- "SCT"
