@@ -22,7 +22,15 @@ library(DoubletFinder)
 library(impactSingleCellToolkit)
 
 # INPUT and OUTPUT Directories
-param_file_fh = "../input/input_one_patient_analysis.json"
+# 1_create_combined_sc_object_gex.R  [Param File]
+
+args = commandArgs(trailingOnly=TRUE)
+if (length(args)!=1) {
+  stop("ERROR: At least one argument must be supplied (JSON parameter file).json", call.=FALSE)
+} 
+param_file_fh = args[1]
+
+#param_file_fh = "../input/input_one_patient_analysis.json"
 params        = fromJSON(file = param_file_fh)
 
 # INPUT
