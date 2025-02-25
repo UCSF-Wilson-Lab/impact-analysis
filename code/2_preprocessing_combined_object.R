@@ -23,13 +23,22 @@ library(DoubletFinder)
 library(impactSingleCellToolkit)
 
 # INPUT and OUTPUT Directories
-param_file_fh = "../input/input_one_patient_analysis.json"
+# 2_preprocessing_combined_object_gex.R  [Param File]
+
+args = commandArgs(trailingOnly=TRUE)
+if (length(args)!=1) {
+  stop("ERROR: At least one argument must be supplied (JSON parameter file).json", call.=FALSE)
+} 
+param_file_fh = args[1]
+
+#param_file_fh = "../input/input_one_patient_analysis.json"
 params        = fromJSON(file = param_file_fh)
 
 # INPUT
 metadata_fh   = params$metadata_file
 metadata      = read.csv(metadata_fh,stringsAsFactors = F,check.names = F)
 THREADS       = params$threads
+PERSAMPLE_SCT = FALSE
 
 # OUTPUT Results Directories
 plot_dir     = params$plot_directory
@@ -53,14 +62,16 @@ set.seed(112358)
 load(fh_raw_seurat_obj)
 
 # Normalization per sample
-seurat.obj.list <- SplitObject(seurat.obj, split.by="sample")
-seurat.obj.list <- lapply(X = seurat.obj.list, 
-                          FUN = SCTransform, 
-                          return.only.var.genes = FALSE)
-seurat.obj <- merge(seurat.obj.list[[1]], 
-                    y = seurat.obj.list[2:length(seurat.obj.list)], 
-                    add.cell.ids = names(seurat.obj.list))
-DefaultAssay(seurat.obj) <- "SCT"
+if(PERSAMPLE_SCT){
+  seurat.obj.list <- SplitObject(seurat.obj, split.by="sample")
+  seurat.obj.list <- lapply(X = seurat.obj.list, 
+                            FUN = SCTransform, 
+                            return.only.var.genes = FALSE)
+  seurat.obj <- merge(seurat.obj.list[[1]], 
+                      y = seurat.obj.list[2:length(seurat.obj.list)], 
+                      add.cell.ids = names(seurat.obj.list))
+  DefaultAssay(seurat.obj) <- "SCT"
+}
 
 
 # Re-cluster
