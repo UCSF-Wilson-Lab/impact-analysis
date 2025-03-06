@@ -59,6 +59,24 @@ options(future.globals.maxSize= 891289600)
 metadata$run_group <- paste(metadata$run,metadata$type,sep = ":")
 metadata_gex       <- metadata[metadata$type %in% c("counts","counts_gex"),]
 
+# If using filtered matrices, check if they exist and omit samples that don't have it
+if(use.filtered.gex){
+  metadata_gex$filt_status <- "no"
+  
+  for (i in 1:nrow(metadata_gex)) {
+    row_df        <- metadata_gex[i,]
+    filt_dir      <- row_df$results_directory_path
+    filt_dir      <- str_replace_all(filt_dir,"multi_counts","multi_counts_filt")
+    status_bool   <- dir.exists(filt_dir)
+    if(status_bool){
+      metadata_gex[i,"filt_status"] <- "yes"
+    }
+  }
+  
+  metadata_gex <- metadata_gex[metadata_gex$filt_status %in% "yes",]
+  metadata_gex$filt_status <- NULL
+}
+
 run_metadata_gex_list <- split(metadata_gex,metadata_gex$run_group)
 
 # 2. Create Seurat Objects for each batch ----

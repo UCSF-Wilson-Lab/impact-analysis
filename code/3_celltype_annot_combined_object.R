@@ -48,7 +48,7 @@ if(!file.exists(objects_dir)){dir.create(objects_dir,recursive = TRUE)}
 
 # Input and Output RData Objects
 fh_raw_seurat_obj       <- file.path(objects_dir,"seurat_obj.combined.gex.RData")
-fh_processed_seurat_obj <- file.path(objects_dir,"seurat_obj.combined.gex.TEMP.RData")
+fh_processed_seurat_obj <- file.path(objects_dir,"seurat_obj.processed.rds")
 
 # Increase size of ENV
 options(future.globals.maxSize= 891289600)
@@ -118,9 +118,42 @@ print(plot_post_batch_correction)
 dev.off()
 
 
+# 4. Azimuth automated celltype annotations ----
+###InstallData("pbmcref")
+###DefaultAssay(seurat.obj). # Check that assay is either RNA or SCT, not CSP
+
+# Run Azimuth
+results_azimuth  <- RunAzimuth(seurat.obj, reference = "pbmcref")
+
+# Add annotations back into Seurat object
+celltypes_azimuth <- results_azimuth@meta.data
+annot_cols        <- names(celltypes_azimuth)
+annot_cols        <- annot_cols[annot_cols %in% c("predicted.celltype.l1","predicted.celltype.l2","predicted.celltype.l3")]
+celltypes_azimuth <- celltypes_azimuth[,annot_cols]
+
+seurat.obj@meta.data <- cbind(seurat.obj@meta.data,celltypes_azimuth)
 
 
-# 4. Process CSP part of object ----
+# 5. UMAP celltype annotations ----
+
+# Plot Azimuth annotations
+
+### Level 1 annotations (main)
+l1_cell_annot_azimuth <- UMAPPlot(object = seurat.obj, group.by="predicted.celltype.l1")
+
+png(file.path(plot_dir,"celltype_annot_azimuth_l1_umap.png"),height = 500,width = 600)
+print(l1_cell_annot_azimuth)
+dev.off()
+
+### Level 2 annotations (fine)
+l2_cell_annot_azimuth <- UMAPPlot(object = seurat.obj, group.by="predicted.celltype.l2")
+
+png(file.path(plot_dir,"celltype_annot_azimuth_l2_umap.png"),height = 500,width = 800)
+print(l2_cell_annot_azimuth)
+dev.off()
+
+
+# 6. Process CSP part of object ----
 
 # This section is option depending on if Cite-Seq data are added in the object
 if("CSP" %in% names(seurat.obj)){
@@ -153,4 +186,4 @@ if("CSP" %in% names(seurat.obj)){
 
 # SAVE ----
 DefaultAssay(seurat.obj) <- "SCT"
-save(seurat.obj,file = fh_processed_seurat_obj)
+saveRDS(seurat.obj,file = fh_processed_seurat_obj)
