@@ -38,7 +38,7 @@ params        = fromJSON(file = param_file_fh)
 metadata_fh   = params$metadata_file
 metadata      = read.csv(metadata_fh,stringsAsFactors = F,check.names = F)
 THREADS       = params$threads
-PERSAMPLE_SCT = FALSE
+PERSAMPLE_SCT = TRUE
 
 # OUTPUT Results Directories
 plot_dir     = params$plot_directory
@@ -64,18 +64,34 @@ load(fh_raw_seurat_obj)
 # Normalization per sample
 if(PERSAMPLE_SCT){
   seurat.obj.list <- SplitObject(seurat.obj, split.by="sample")
-  seurat.obj.list <- lapply(X = seurat.obj.list, 
-                            FUN = SCTransform, 
-                            return.only.var.genes = FALSE)
-  seurat.obj <- merge(seurat.obj.list[[1]], 
-                      y = seurat.obj.list[2:length(seurat.obj.list)], 
-                      add.cell.ids = names(seurat.obj.list))
-  DefaultAssay(seurat.obj) <- "SCT"
+  seurat.obj.list <- lapply(seurat.obj.list, function(x) {
+    SCTransform(x, return.only.var.genes = FALSE, verbose = FALSE)
+  })
+  
+  features <- SelectIntegrationFeatures(object.list = seurat.obj.list, nfeatures = 3000)
+  
+  # Set variable features for each object to avoid SCT model conflicts
+  for (i in 1:length(seurat.obj.list)) {
+    VariableFeatures(seurat.obj.list[[i]]) <- features
+  }
+  
+  # Step 5: Prepare for integration
+  seurat.obj.list <- PrepSCTIntegration(object.list = seurat.obj.list, anchor.features = features)
+  
+  # Find integration anchors
+  anchors <- FindIntegrationAnchors(object.list = seurat.obj.list, 
+                                    normalization.method = "SCT", 
+                                    anchor.features = features)
+  
+  # Integrate data
+  seurat.obj <- IntegrateData(anchorset = anchors, normalization.method = "SCT")
+  
+  #DefaultAssay(seurat.obj) <- "integrated"
 }
 
 
 # Re-cluster
-seurat.obj   <- scaleAndClusterSeuratObject(seurat.obj,normalize = T,dims = 1:30,npca = 10,tsne = T)
+seurat.obj   <- scaleAndClusterSeuratObject(seurat.obj,normalize = F,dims = 1:30,npca = 10,tsne = T)
 pc_elbowplot <- plotOptimalPCsforSeuratObject(seurat.obj)
 
 # 2. Plot pre-batch correction and add in batch column ----
@@ -102,8 +118,10 @@ print(plot_pre_batch_correction)
 dev.off()
 
 # 3. Harmony batch correction ----
+assay_to_use <- "SCT"
+if(PERSAMPLE_SCT){assay_to_use <- "integrated"}
 
-seurat.obj <- seurat.obj %>% RunHarmony("batch", assay.use="SCT")
+seurat.obj <- seurat.obj %>% RunHarmony("batch", assay.use=assay_to_use)
 
 # UMAP and clustering with harmonized PCs
 seurat.obj <- RunUMAP(seurat.obj, reduction='harmony', dims = 1:30)
@@ -152,5 +170,5 @@ if("CSP" %in% names(seurat.obj)){
 
 
 # SAVE ----
-DefaultAssay(seurat.obj) <- "SCT"
+DefaultAssay(seurat.obj) <- assay_to_use
 save(seurat.obj,file = fh_processed_seurat_obj)
