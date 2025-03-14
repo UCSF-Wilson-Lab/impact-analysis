@@ -50,7 +50,7 @@ fh_raw_seurat_obj       <- file.path(objects_dir,"seurat_obj.combined.gex.TEMP.R
 fh_processed_seurat_obj <- file.path(objects_dir,"seurat_obj.processed.rds")
 
 # Increase size of ENV
-options(future.globals.maxSize= 891289600)
+options(future.globals.maxSize= 40000*1024^2)
 set.seed(112358)
 
 

@@ -50,7 +50,7 @@ if(!file.exists(objects_dir)){dir.create(objects_dir,recursive = TRUE)}
 fh_raw_seurat_obj <- file.path(objects_dir,"seurat_obj.combined.gex.RData")
 
 # Increase size of ENV
-options(future.globals.maxSize= 891289600)
+options(future.globals.maxSize= 40000*1024^2)
 
 
 # 1. Separate samples by batch/assay ----

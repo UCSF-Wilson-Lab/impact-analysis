@@ -51,7 +51,7 @@ fh_raw_seurat_obj       <- file.path(objects_dir,"seurat_obj.combined.gex.RData"
 fh_processed_seurat_obj <- file.path(objects_dir,"seurat_obj.combined.gex.TEMP.RData")
 
 # Increase size of ENV
-options(future.globals.maxSize= 891289600)
+options(future.globals.maxSize= 40000*1024^2)
 set.seed(112358)
 
 
@@ -68,7 +68,7 @@ if(PERSAMPLE_SCT){
     SCTransform(x, return.only.var.genes = FALSE, verbose = FALSE)
   })
   
-  features <- SelectIntegrationFeatures(object.list = seurat.obj.list, nfeatures = 3000)
+  features <- SelectIntegrationFeatures(object.list = seurat.obj.list, nfeatures = 2000)
   
   # Set variable features for each object to avoid SCT model conflicts
   for (i in 1:length(seurat.obj.list)) {
@@ -79,7 +79,12 @@ if(PERSAMPLE_SCT){
   seurat.obj.list <- PrepSCTIntegration(object.list = seurat.obj.list, anchor.features = features)
   
   # Find integration anchors
-  anchors <- FindIntegrationAnchors(object.list = seurat.obj.list, 
+  select_reference_samples        <- 1:length(names(seurat.obj.list))
+  names(select_reference_samples) <- names(seurat.obj.list)
+  
+  select_reference_samples        <- select_reference_samples[1] %>% as.numeric()
+  anchors <- FindIntegrationAnchors(object.list = seurat.obj.list,
+                                    reference = c(select_reference_samples),
                                     normalization.method = "SCT", 
                                     anchor.features = features)
   
