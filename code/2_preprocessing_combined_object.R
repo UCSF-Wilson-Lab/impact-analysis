@@ -38,6 +38,7 @@ params        = fromJSON(file = param_file_fh)
 metadata_fh   = params$metadata_file
 metadata      = read.csv(metadata_fh,stringsAsFactors = F,check.names = F)
 THREADS       = params$threads
+anchor_col    = params$sample_anchor_metadata_column
 PERSAMPLE_SCT = TRUE
 
 # OUTPUT Results Directories
@@ -79,12 +80,20 @@ if(PERSAMPLE_SCT){
   seurat.obj.list <- PrepSCTIntegration(object.list = seurat.obj.list, anchor.features = features)
   
   # Find integration anchors
-  select_reference_samples        <- 1:length(names(seurat.obj.list))
-  names(select_reference_samples) <- names(seurat.obj.list)
+  reference_samples <- NULL
+  if(anchor_col %in% names(metadata)){
+    reference_samples        <- 1:length(names(seurat.obj.list))
+    names(reference_samples) <- names(seurat.obj.list)
+    
+    status_col   <- metadata[,anchor_col,drop=T]
+    meta_anchors <- metadata[ status_col %in% "yes",]
+    meta_anchors <- meta_anchors[meta_anchors$type %in% c("counts","counts_gex"),]
+    
+    reference_samples        <- reference_samples[names(reference_samples) %in% meta_anchors$sample] %>% as.numeric()
+  }
   
-  select_reference_samples        <- select_reference_samples[1] %>% as.numeric()
   anchors <- FindIntegrationAnchors(object.list = seurat.obj.list,
-                                    reference = c(select_reference_samples),
+                                    reference = reference_samples,
                                     normalization.method = "SCT", 
                                     anchor.features = features)
   

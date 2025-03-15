@@ -35,15 +35,17 @@ param_file_fh = args[1]
 params        = fromJSON(file = param_file_fh)
 
 # INPUT
-metadata_fh   = params$metadata_file
-metadata      = read.csv(metadata_fh,stringsAsFactors = F,check.names = F)
-THREADS       = params$threads
+metadata_fh       = params$metadata_file
+metadata          = read.csv(metadata_fh,stringsAsFactors = F,check.names = F)
+ref_dir_azimuth   = params$celltype_annotation_reference_directory
+THREADS           = params$threads
 
 # OUTPUT Results Directories
 plot_dir     = params$plot_directory
 objects_dir  = params$objects_directory
 if(!file.exists(plot_dir)){dir.create(plot_dir,recursive = TRUE)}
 if(!file.exists(objects_dir)){dir.create(objects_dir,recursive = TRUE)}
+
 
 # Input and Output RData Objects
 fh_raw_seurat_obj       <- file.path(objects_dir,"seurat_obj.combined.gex.TEMP.RData")
@@ -66,7 +68,9 @@ load(fh_raw_seurat_obj)
 ###DefaultAssay(seurat.obj). # Check that assay is either RNA, SCT or integrated, not CSP
 
 # Run Azimuth
-results_azimuth  <- RunAzimuth(seurat.obj, reference = "pbmcref")
+# - if a path to an Azimuth reference dir in not provided, use:
+#    reference = "pbmcref"
+results_azimuth  <- RunAzimuth(seurat.obj, reference = ref_dir_azimuth)
 
 # Add annotations back into Seurat object
 celltypes_azimuth <- results_azimuth@meta.data
