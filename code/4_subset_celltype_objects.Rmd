@@ -1,0 +1,132 @@
+---
+title: "Subset celltype objects"
+output: html_document
+date: "2025-03-20"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# START
+* Workflow for processing combined analysis object
+* Prior to running this code set working directory to 'impact-analysis/code'
+
+```{r,warning=F,message=F}
+# Set Working Directory before starting
+
+# Immcantation
+suppressPackageStartupMessages(library(alakazam))
+suppressPackageStartupMessages(library(shazam))
+suppressPackageStartupMessages(library(tigger))
+suppressPackageStartupMessages(library(dowser))
+suppressPackageStartupMessages(library(airr))
+
+suppressPackageStartupMessages(library(rjson))
+suppressPackageStartupMessages(library(glmGamPoi))
+suppressPackageStartupMessages(library(Seurat))
+suppressPackageStartupMessages(library(dittoSeq))
+suppressPackageStartupMessages(library(reshape2))
+suppressPackageStartupMessages(library(kableExtra))
+suppressPackageStartupMessages(library(devtools))
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(RColorBrewer))
+suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(cowplot))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(impactSingleCellToolkit))
+
+# Propeller plots
+suppressPackageStartupMessages(library(speckle))
+suppressPackageStartupMessages(library(SingleCellExperiment))
+suppressPackageStartupMessages(library(limma))
+suppressPackageStartupMessages(library(patchwork))
+suppressPackageStartupMessages(library(edgeR))
+suppressPackageStartupMessages(library(statmod))
+suppressPackageStartupMessages(library(viridis))
+
+# Increase size of ENV
+options(future.globals.maxSize= 891289600)
+set.seed(12345)
+```
+
+
+# 1. Load inputs
+
+### a. params
+```{r}
+# INPUT and OUTPUT Directories
+param_file_fh = "../input/input_all_csf_analysis.json"
+params        = fromJSON(file = param_file_fh)
+
+# INPUT
+metadata_fh   = params$metadata_file
+metadata      = read.csv(metadata_fh,stringsAsFactors = F,check.names = F)
+THREADS       = params$threads
+
+# subset metadata
+metadata_gex  <- metadata[metadata$type %in% c("counts","counts_gex"),]
+metadata_bcr  <- metadata[metadata$type %in% c("vdj_b"),]
+metadata_tcr  <- metadata[metadata$type %in% c("vdj_t"),]
+
+# OUTPUT Results Directories
+plot_dir     = params$plot_directory
+objects_dir  = params$objects_directory
+if(!file.exists(plot_dir)){dir.create(plot_dir,recursive = TRUE)}
+if(!file.exists(objects_dir)){dir.create(objects_dir,recursive = TRUE)}
+```
+
+### b. processed GEX/CSP object
+```{r}
+fh_processed_seurat_obj <- file.path(objects_dir,"seurat_obj.processed.rds")
+full_rnaseq_obj         <- readRDS(fh_processed_seurat_obj)
+```
+
+# 2. Add key metadata
+```{r}
+createMetadataColumn <- function(sample_vec, metadata,sample.col = "sample",meta.col = "SampleType") {
+  new_col <- sample_vec
+  uni_labels <- metadata[,meta.col] %>% unique()
+  
+  for (categ in uni_labels) {
+    categ_samples <- metadata[metadata[,meta.col] %in% categ,sample.col] %>% unique()
+    new_col[new_col %in% categ_samples] <- categ
+  }
+  
+  return(new_col)
+}
+
+# Full object
+full_rnaseq_obj@meta.data$HCVBID <- createMetadataColumn(full_rnaseq_obj@meta.data$sample,metadata = metadata_gex,meta.col = "HCVBID" )
+full_rnaseq_obj@meta.data$StudyID <- createMetadataColumn(full_rnaseq_obj@meta.data$sample,metadata = metadata_gex,meta.col = "StudyID" )
+full_rnaseq_obj@meta.data$TimePoint <- createMetadataColumn(full_rnaseq_obj@meta.data$sample,metadata = metadata_gex,meta.col = "TimePoint" )
+```
+
+
+# 3. Plot cell type proportions
+```{r}
+# Propeller
+prop_data <- propeller(clusters = full_rnaseq_obj$predicted.celltype.l1, sample=full_rnaseq_obj$sample, group=full_rnaseq_obj$TimePoint)
+
+# Plot
+prop <- table(full_rnaseq_obj$predicted.celltype.l1, full_rnaseq_obj$TimePoint)
+prop <- as.data.frame(prop)
+prop$Var1 <- as.character(prop$Var1)
+prop_plot <- ggplot(prop, aes(x = Var2, y = Freq, fill = Var1)) +
+  theme_bw(base_size = 15) +
+  geom_col(position = "fill", width = 0.5) +
+  xlab("Group") +
+  ylab("Proportion") +
+  scale_fill_manual(values = brewer.pal(12, "Paired")) +
+  theme(legend.title = element_blank())
+
+png(file.path(plot_dir,"Cellproportion_big_CSF_object.png"),height = 500,width = 1000)
+print(prop_plot)
+dev.off()
+```
+
+# ---
+
+# Subset B cells
+
