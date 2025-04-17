@@ -62,6 +62,12 @@ set.seed(112358)
 # Load combined GEX object
 load(fh_raw_seurat_obj)
 
+# Omit TCR V genes from object
+all_genes  <- row.names(seurat.obj)
+tcr_vgenes <- all_genes[grep("TRAV|TRBV|TRGV|TRDV",all_genes)]
+seurat.obj <- seurat.obj[! row.names(seurat.obj) %in% tcr_vgenes,]
+
+
 # Normalization per sample
 if(PERSAMPLE_SCT){
   seurat.obj.list <- SplitObject(seurat.obj, split.by="sample")
@@ -98,6 +104,8 @@ if(PERSAMPLE_SCT){
                                     anchor.features = features)
   
   # Integrate data
+  # - integration layer will only have the variable to genes, but other layers will have all genes
+  # - To include all genes, features.to.integrate = all_genes # all_genes is a vector will all gene names
   seurat.obj <- IntegrateData(anchorset = anchors, normalization.method = "SCT")
   
   #DefaultAssay(seurat.obj) <- "integrated"
