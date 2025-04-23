@@ -25,14 +25,13 @@ library(impactSingleCellToolkit)
 # INPUT and OUTPUT Directories
 # 3_celltype_annot_combined_object.R  [Param File]
 
-#args = commandArgs(trailingOnly=TRUE)
-#if (length(args)!=1) {
-#  stop("ERROR: At least one argument must be supplied (JSON parameter file).json", call.=FALSE)
-#} 
-#param_file_fh = args[1]
+args = commandArgs(trailingOnly=TRUE)
+if (length(args)!=1) {
+  stop("ERROR: At least one argument must be supplied (JSON parameter file).json", call.=FALSE)
+} 
+param_file_fh = args[1]
 
-#param_file_fh = "../input/input_one_patient_analysis.json"
-param_file_fh = "/wynton/protected/home/wilson/rdandekar/rprojects/ImpactAnalysis/impact-analysis/input/input_all_csf_analysis.json"
+#param_file_fh = "../input/input_all_csf_analysis.json"
 params        = fromJSON(file = param_file_fh)
 
 # INPUT
@@ -74,6 +73,7 @@ load(fh_raw_seurat_obj)
 # - to hard code the path to a local reference use:
 #    reference = ref_dir_azimuth
 results_azimuth  <- RunAzimuth(seurat.obj, reference = "pbmcref")
+
 
 # Add annotations back into Seurat object
 celltypes_azimuth <- results_azimuth@meta.data
