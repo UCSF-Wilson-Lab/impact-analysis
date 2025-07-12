@@ -40,6 +40,7 @@ params        = fromJSON(file = param_file_fh)
 # INPUT
 metadata_fh   = params$metadata_file
 metadata      = read.csv(metadata_fh,stringsAsFactors = F,check.names = F)
+plot_dir      = params$plot_directory
 THREADS       = params$threads
 
 # Functions ----
@@ -89,6 +90,11 @@ preprocessCountsUsingMetadata <- function(sample,metadata_counts,threads = 1,
   hd5_dir         <- metadata_sample$path_hd5
   counts_filt_dir <- metadata_sample$path_counts_filt
   
+  # Completion status
+  entry <- data.frame(matrix(ncol = 2, nrow = 1)) %>% setNames(c("sample","passed_preprocessing"))
+  entry$sample               <- sample
+  entry$passed_preprocessing <- "no"
+  
   # Change multi status based on count type
   count_type      <- metadata_sample$type
   if(output.type == "gex"){
@@ -116,32 +122,39 @@ preprocessCountsUsingMetadata <- function(sample,metadata_counts,threads = 1,
                                        multi.results = multi.status,assay = output.type,
                                        min.genes.per.cell = min.genes.gex,max.genes.per.cell = NULL)
   
-  # Create Seurat Object
-  seurat.obj <- createSeuratObjectFromMatrix(
-    sc.data      = gex.matrix,
-    project.name = "GEX_one_sample",
-    npca         = 20, min.genes = min.genes.gex,
-    normalize = F,dim.reduction = F
-  )
+  # Only continue pre-processing if there are at least 100 cells
+  if(length(colnames(gex.matrix)) > 100){
+    # Create Seurat Object
+    seurat.obj <- createSeuratObjectFromMatrix(
+      sc.data      = gex.matrix,
+      project.name = "GEX_one_sample",
+      npca         = 20, min.genes = min.genes.gex,
+      normalize = F,dim.reduction = F
+    )
+    
+    # Add samples column
+    cells      <- row.names(seurat.obj@meta.data)
+    sample_col <- cells
+    sample_col <- tstrsplit(sample_col,"-")[[2]]
+    seurat.obj@meta.data$sample <- sample_col
+    
+    # Doublet removal
+    seurat.obj <- findDoublets(seurat.obj,sample.col = "sample",threads = threads)
+    
+    # Omit Doublets 
+    cells_to_keep  <- names(seurat.obj$doublet_finder[seurat.obj$doublet_finder %in% "Singlet"])
+    seurat.obj     <- seurat.obj[,colnames(seurat.obj) %in% cells_to_keep]
+    
+    # Write output files
+    counts_matrix_processed <- gex.matrix[,colnames(gex.matrix) %in% colnames(seurat.obj)]
+    DropletUtils:::write10xCounts(input_dir, counts_matrix_processed, version = "3",overwrite = TRUE)
+    
+    # If it runs through all of this then it passed pre-processing
+    entry$passed_preprocessing <- "yes"
+  }
   
-  # Add samples column
-  cells      <- row.names(seurat.obj@meta.data)
-  sample_col <- cells
-  sample_col <- tstrsplit(sample_col,"-")[[2]]
-  seurat.obj@meta.data$sample <- sample_col
   
-  # Doublet removal
-  seurat.obj <- findDoublets(seurat.obj,sample.col = "sample",threads = threads)
-  
-  # Omit Doublets 
-  cells_to_keep  <- names(seurat.obj$doublet_finder[seurat.obj$doublet_finder %in% "Singlet"])
-  seurat.obj     <- seurat.obj[,colnames(seurat.obj) %in% cells_to_keep]
-  
-  # Write output files
-  counts_matrix_processed <- gex.matrix[,colnames(gex.matrix) %in% colnames(seurat.obj)]
-  DropletUtils:::write10xCounts(input_dir, counts_matrix_processed, version = "3",overwrite = TRUE)
-  
-  # Create a sample entry
+  return(entry)
 }
 
 
@@ -161,6 +174,12 @@ min.genes.per.cell <- NULL
 max.genes.per.cell <- NULL
 
 # 2. loop through samples and pre-process ----
-lapply(as.list(samples), preprocessCountsUsingMetadata,
-       metadata_counts=metadata_counts,threads = THREADS,ambient.rna.filter=TRUE,
-       output.type="gex",min.genes.gex=400,multi.status=TRUE)
+df_list <- lapply(as.list(samples), preprocessCountsUsingMetadata,
+                  metadata_counts=metadata_counts,threads = THREADS,ambient.rna.filter=TRUE,
+                  output.type="gex",min.genes.gex=400,multi.status=TRUE)
+
+preprocessing_status_df <- do.call("rbind",df_list)
+
+# Write a CSV of which samples passed pre-processing
+write.csv(preprocessing_status_df,file = file.path(plot_dir,"results_preprocessing_status.csv"),row.names = F,quote = F)
+
