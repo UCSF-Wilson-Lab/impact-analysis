@@ -33,9 +33,9 @@ if (length(args)!=1) {
   stop("ERROR: At least one argument must be supplied (JSON parameter file).json", call.=FALSE)
 } 
 param_file_fh = args[1]
-
-#param_file_fh = "../input/input_full_cohort_analysis.json"
+##param_file_fh = "../input/input_full_cohort_analysis.json"
 params        = fromJSON(file = param_file_fh)
+
 
 # INPUT
 metadata_fh   = params$metadata_file
@@ -107,20 +107,25 @@ preprocessCountsUsingMetadata <- function(sample,metadata_counts,threads = 1,
   if(ambient.rna.filter){multi.status <- FALSE} # Post ambient RNA filter, the output is in a non-multi format
   
   # If performing ambient RNA filter output results to filtered counts folder
-  if(ambient.rna.filter){
-    raw_mtx_fh  <- file.path(hd5_dir,"raw_feature_bc_matrix.h5")
-    filt_mtx_fh <- file.path(hd5_dir,"sample_filtered_feature_bc_matrix.h5")
+  gex.matrix <- NULL
+  tryCatch({
+    if(ambient.rna.filter){
+      raw_mtx_fh  <- file.path(hd5_dir,"raw_feature_bc_matrix.h5")
+      filt_mtx_fh <- file.path(hd5_dir,"sample_filtered_feature_bc_matrix.h5")
+      
+      runAmbientRNAfilterAndOuputFiles(raw_hd5_fh = raw_mtx_fh,
+                                       filt_hd5_fh = filt_mtx_fh,
+                                       output_dir = counts_filt_dir)
+    }
     
-    runAmbientRNAfilterAndOuputFiles(raw_hd5_fh = raw_mtx_fh,
-                                     filt_hd5_fh = filt_mtx_fh,
-                                     output_dir = counts_filt_dir)
-  }
-  
-  # Gene count filter on input sample matrix
-  dataset_loc <- tstrsplit(input_dir,sample)[[1]]
-  gex.matrix <- generateCombinedMatrix(dataset_loc, samples.vec = sample,THREADS = 1,
-                                       multi.results = multi.status,assay = output.type,
-                                       min.genes.per.cell = min.genes.gex,max.genes.per.cell = NULL)
+    # Gene count filter on input sample matrix
+    dataset_loc <- tstrsplit(input_dir,sample)[[1]]
+    gex.matrix <- generateCombinedMatrix(dataset_loc, samples.vec = sample,THREADS = 1,
+                                         multi.results = multi.status,assay = output.type,
+                                         min.genes.per.cell = min.genes.gex,max.genes.per.cell = NULL)
+  }, error = function(e) {
+    gex.matrix <- NULL
+  })
   
   # Only continue pre-processing if there are at least 100 cells
   if(length(colnames(gex.matrix)) > 100){
