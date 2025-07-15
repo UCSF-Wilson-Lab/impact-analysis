@@ -40,6 +40,7 @@ metadata      = read.csv(metadata_fh,stringsAsFactors = F,check.names = F)
 THREADS       = params$threads
 anchor_col    = params$sample_anchor_metadata_column
 PERSAMPLE_SCT = TRUE
+RUN_HARMONY   = TRUE
 
 # OUTPUT Results Directories
 plot_dir     = params$plot_directory
@@ -143,20 +144,22 @@ dev.off()
 assay_to_use <- "SCT"
 if(PERSAMPLE_SCT){assay_to_use <- "integrated"}
 
-seurat.obj <- seurat.obj %>% RunHarmony("batch", assay.use=assay_to_use)
 
-# UMAP and clustering with harmonized PCs
-seurat.obj <- RunUMAP(seurat.obj, reduction='harmony', dims = 1:30)
-seurat.obj <- FindNeighbors(seurat.obj, reduction='harmony')
-seurat.obj <- FindClusters(seurat.obj, resolution = 0.3)
-
-# Plot 
-plot_post_batch_correction <- UMAPPlot(object = seurat.obj, group.by="batch")
-
-png(file.path(plot_dir,"post_batch_correction_umap.png"),height = 500,width = 600)
-print(plot_post_batch_correction)
-dev.off()
-
+if(RUN_HARMONY){
+  seurat.obj <- seurat.obj %>% RunHarmony("batch", assay.use=assay_to_use)
+  
+  # UMAP and clustering with harmonized PCs
+  seurat.obj <- RunUMAP(seurat.obj, reduction='harmony', dims = 1:30)
+  seurat.obj <- FindNeighbors(seurat.obj, reduction='harmony')
+  seurat.obj <- FindClusters(seurat.obj, resolution = 0.3)
+  
+  # Plot 
+  plot_post_batch_correction <- UMAPPlot(object = seurat.obj, group.by="batch")
+  
+  png(file.path(plot_dir,"post_batch_correction_umap.png"),height = 500,width = 600)
+  print(plot_post_batch_correction)
+  dev.off()
+}
 
 
 
