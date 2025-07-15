@@ -39,7 +39,7 @@ metadata_fh   = params$metadata_file
 metadata      = read.csv(metadata_fh,stringsAsFactors = F,check.names = F)
 THREADS       = params$threads
 anchor_col    = params$sample_anchor_metadata_column
-PERSAMPLE_SCT = TRUE
+PERSAMPLE_SCT = FALSE
 RUN_HARMONY   = TRUE
 
 # OUTPUT Results Directories
@@ -114,7 +114,10 @@ if(PERSAMPLE_SCT){
 
 
 # Re-cluster
-seurat.obj   <- scaleAndClusterSeuratObject(seurat.obj,normalize = F,dims = 1:30,npca = 10,tsne = T)
+norm_param   <- TRUE
+if(PERSAMPLE_SCT){norm_param   <- FALSE}
+
+seurat.obj   <- scaleAndClusterSeuratObject(seurat.obj,normalize = norm_param,dims = 1:30,npca = 10,tsne = T)
 pc_elbowplot <- plotOptimalPCsforSeuratObject(seurat.obj)
 
 # 2. Plot pre-batch correction and add in batch column ----
