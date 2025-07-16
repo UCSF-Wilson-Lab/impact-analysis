@@ -124,7 +124,7 @@ pc_elbowplot <- plotOptimalPCsforSeuratObject(seurat.obj)
 
 # add batch column
 metadata_gex                <- metadata[metadata$type %in% c("counts_gex","counts"),]
-sample_to_batch_list        <- metadata_gex$run
+sample_to_batch_list        <- metadata_gex$run_batch
 names(sample_to_batch_list) <- metadata_gex$sample
 sample_to_batch_list        <- as.list(sample_to_batch_list)
 
