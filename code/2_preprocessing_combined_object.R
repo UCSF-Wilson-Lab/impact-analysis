@@ -39,8 +39,8 @@ metadata_fh   = params$metadata_file
 metadata      = read.csv(metadata_fh,stringsAsFactors = F,check.names = F)
 THREADS       = params$threads
 anchor_col    = params$sample_anchor_metadata_column
-PERSAMPLE_SCT = FALSE
-RUN_HARMONY   = TRUE
+PERSAMPLE_SCT = TRUE
+RUN_HARMONY   = FALSE
 
 # OUTPUT Results Directories
 plot_dir     = params$plot_directory

@@ -67,19 +67,22 @@ load(fh_raw_seurat_obj)
 # figure out the grouping based on run size
 run_summary <- table(seurat.obj$batch) %>% as.data.frame() %>% setNames(c("run","cell_count"))
 run_summary <- run_summary[order(run_summary$cell_count,decreasing = T),]
-run_summary$object_subset        <- "object3"
+run_summary$object_subset        <- "object4"
 run_summary[1,"object_subset"]   <- "object1" # largest batch
 run_summary[2:3,"object_subset"] <- "object2"
+run_summary[4:6,"object_subset"] <- "object3"
 
 runs_subset1 <- run_summary[run_summary$object_subset %in% "object1","run"] %>% as.character()
 runs_subset2 <- run_summary[run_summary$object_subset %in% "object2","run"] %>% as.character()
 runs_subset3 <- run_summary[run_summary$object_subset %in% "object3","run"] %>% as.character()
+runs_subset4 <- run_summary[run_summary$object_subset %in% "object4","run"] %>% as.character()
 
 # Create column in the big seurat object
 seurat.obj$object_subset <- seurat.obj$batch
 seurat.obj$object_subset[seurat.obj$object_subset %in% runs_subset1] <- "object1"
 seurat.obj$object_subset[seurat.obj$object_subset %in% runs_subset2] <- "object2"
 seurat.obj$object_subset[seurat.obj$object_subset %in% runs_subset3] <- "object3"
+seurat.obj$object_subset[seurat.obj$object_subset %in% runs_subset4] <- "object4"
 
 
 # 2. Split and save objects ----
