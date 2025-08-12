@@ -22,8 +22,17 @@ library(DoubletFinder)
 library(impactSingleCellToolkit)
 
 # INPUT and OUTPUT Directories
-param_file_fh = "../input/input_one_patient_analysis.json"
+# 4_overlap_gex_and_csp_object.R  [Param File]
+
+args = commandArgs(trailingOnly=TRUE)
+if (length(args)!=1) {
+  stop("ERROR: At least one argument must be supplied (JSON parameter file).json", call.=FALSE)
+} 
+param_file_fh = args[1]
+
+#param_file_fh = "../input/input_one_patient_analysis.json"
 params        = fromJSON(file = param_file_fh)
+
 
 # INPUT
 metadata_fh   = params$metadata_file
@@ -36,8 +45,11 @@ objects_dir  = params$objects_directory
 if(!file.exists(plot_dir)){dir.create(plot_dir,recursive = TRUE)}
 if(!file.exists(objects_dir)){dir.create(objects_dir,recursive = TRUE)}
 
+# Input Object
+fh_processed_seurat_obj <- file.path(objects_dir,"seurat_obj.processed.rds")
+
 # RData Objects to save
-fh_raw_seurat_obj <- file.path(objects_dir,"seurat_obj.combined.RData")
+fh_overlapped_seurat_obj <- file.path(objects_dir,"seurat_obj_csp_overlap.processed.rds")
 
 # Increase size of ENV
 options(future.globals.maxSize= 40000*1024^2)
@@ -50,8 +62,6 @@ metadata$run_group <- paste(metadata$run,metadata$type,sep = ":")
 metadata_gex       <- metadata[metadata$type %in% c("counts","counts_gex"),]
 metadata_csp       <- metadata[metadata$type %in% c("counts","counts_csp"),]
 
-
-run_metadata_gex_list <- split(metadata_gex,metadata_gex$run_group)
 run_metadata_csp_list <- split(metadata_csp,metadata_csp$run_group)
 
 
@@ -91,7 +101,6 @@ makeRunInputMtx <- function(runID ,run_metadata_list,THREADS,
   return(gex.matrix)
 }
 
-gex_run_list <- names(run_metadata_gex_list) %>% as.list()
 csp_run_list <- names(run_metadata_csp_list) %>% as.list()
 
 # Initialize variables
@@ -108,43 +117,12 @@ csp_mtx_list <- lapply(csp_run_list, makeRunInputMtx,
                        THREADS=THREADS,output.type = "csp",min.genes.csp=1)
 merged_csp_mtx <- do.call("cbind",csp_mtx_list)
 
-# GEX input matrix
-gex_mtx_list <- lapply(gex_run_list, makeRunInputMtx,
-                       run_metadata_list=run_metadata_gex_list,
-                       THREADS=THREADS,output.type = "gex",min.genes.gex=400)
-merged_gex_mtx <- do.call("cbind",gex_mtx_list)
+
+# 3. Load Processed object ----
+seurat.obj <- readRDS(fh_processed_seurat_obj)
 
 
-
-# 3. Create Seurat Objects for GEX and CSP ----
-seurat.obj <- createSeuratObjectFromMatrix(
-  sc.data      = merged_gex_mtx,
-  project.name = "GEX_IMPACT_OnePatient",
-  npca         = 20, min.genes = 400,
-  normalize = F,dim.reduction = F
-)
-
-# Add samples column
-cells      <- row.names(seurat.obj@meta.data)
-sample_col <- cells
-sample_col <- tstrsplit(sample_col,"-")[[2]]
-seurat.obj@meta.data$sample <- sample_col
-
-# Omit samples with low number of cells
-LOW_CELLS_THRESH          <- 100
-sample_cell_counts        <- as.data.frame(table(seurat.obj$sample))
-names(sample_cell_counts) <- c("sample","Freq")
-sample_cell_counts        <- sample_cell_counts[sample_cell_counts$Freq > LOW_CELLS_THRESH,]
-
-cells_to_keep  <- names(seurat.obj$sample[seurat.obj$sample %in% sample_cell_counts$sample])
-seurat.obj     <- seurat.obj[,colnames(seurat.obj) %in% cells_to_keep]
-
-# 4. Identify Doublets ----
-set.seed(1234)
-
-seurat.obj <- findDoublets(seurat.obj,sample.col = "sample",threads = THREADS)
-
-# 5. Add in CSP and overlap both assays ----
+# 4. Overlap objects ----
 cells_csp <- colnames(merged_csp_mtx)
 cells_gex <- colnames(seurat.obj)
 overlap   <- cells_csp[cells_csp %in% cells_gex]
@@ -157,5 +135,5 @@ seurat.obj[["CSP"]] <- CreateAssayObject(counts = counts_csp)
 
 
 # SAVE ----
-save(seurat.obj,file = fh_raw_seurat_obj)
+saveRDS(seurat.obj,file = fh_overlapped_seurat_obj)
 
