@@ -12,7 +12,7 @@ suppressPackageStartupMessages(library(impactSingleCellToolkit))
 
 
 # INPUT and OUTPUT Directories
-param_file_fh = "../../input/input_full_cohort_analysis.json"
+param_file_fh = "../../input/input_full_cohort_immcantation.json"
 params        = fromJSON(file = param_file_fh)
 
 # INPUT
@@ -29,6 +29,7 @@ if(!file.exists(vdj_tcr_dir)){dir.create(vdj_tcr_dir,recursive = TRUE)}
 if(!file.exists(results_dir)){dir.create(results_dir,recursive = TRUE)}
 
 # Separate TCR and BCR metadata
+metadata     <- metadata[metadata$Project %in% c("IMPACT","Healthy"),]
 metadata_bcr <- metadata[metadata$type %in% "vdj_b",]
 metadata_tcr <- metadata[metadata$type %in% "vdj_t",]
 
