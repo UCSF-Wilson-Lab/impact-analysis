@@ -81,6 +81,6 @@ tcr_df$unique_cell_id <- formatUniqueIDcolum(tcr_df$unique_cell_id)
 
 
 # Write TSVs
-write.table(bcr_df,file = file.path(imm_results_bcr_dir,"IMPACT_ALL_BCR_immcantation_results.tsv"),row.names = F,sep = "\t",quote = F)
-write.table(tcr_df,file = file.path(imm_results_tcr_dir,"IMPACT_ALL_TCR_immcantation_results.tsv"),row.names = F,sep = "\t",quote = F)
+write.table(bcr_df,file = file.path(table_dir,"IMPACT_ALL_BCR_immcantation_results.tsv"),row.names = F,sep = "\t",quote = F)
+write.table(tcr_df,file = file.path(table_dir,"IMPACT_ALL_TCR_immcantation_results.tsv"),row.names = F,sep = "\t",quote = F)
 
