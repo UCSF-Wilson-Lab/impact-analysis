@@ -138,8 +138,12 @@ max.genes.per.cell <- NULL
 gex_mtx_list <- lapply(gex_run_list, makeRunInputMtx,
                        run_metadata_list=run_metadata_gex_list,use.filtered.gex=use.filtered.gex,
                        THREADS=THREADS,output.type = "gex",min.genes.gex=400)
-merged_gex_mtx <- do.call("cbind",gex_mtx_list)
+#merged_gex_mtx <- do.call("cbind",gex_mtx_list)
 
+### Merge based on the fact the samples have different numbers of rows
+common_rows          <- Reduce(intersect, lapply(gex_mtx_list, rownames))
+gex_mtx_list_aligned <- lapply(gex_mtx_list, function(m) m[common_rows, , drop = FALSE])
+merged_gex_mtx       <- do.call("cbind", gex_mtx_list_aligned)
 
 
 # 3. Create Seurat Objects for GEX ----
