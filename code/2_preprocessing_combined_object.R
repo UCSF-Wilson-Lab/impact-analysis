@@ -120,10 +120,18 @@ if(PERSAMPLE_SCT){norm_param   <- FALSE}
 seurat.obj   <- scaleAndClusterSeuratObject(seurat.obj,normalize = norm_param,dims = 1:30,npca = 10,tsne = T)
 pc_elbowplot <- plotOptimalPCsforSeuratObject(seurat.obj)
 
+#### TEMP SAVE - for troubleshooting
+#save(seurat.obj,file = fh_processed_seurat_obj)
+####
+
 # 2. Plot pre-batch correction and add in batch column ----
 
 # add batch column
 metadata_gex                <- metadata[metadata$type %in% c("counts_gex","counts"),]
+
+if(! "run_batch" %in% names(metadata_gex)){
+  metadata_gex$run_batch <- metadata_gex$run
+}
 sample_to_batch_list        <- metadata_gex$run_batch
 names(sample_to_batch_list) <- metadata_gex$sample
 sample_to_batch_list        <- as.list(sample_to_batch_list)
