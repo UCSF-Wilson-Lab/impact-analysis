@@ -1,0 +1,181 @@
+Bootstrap: docker
+From: rocker/r-ver:4.5.0
+
+%labels
+    Author        rdandekar
+    Project       impact-analysis
+    Description   R 4.5.0 base for the IMPACT single-cell pipeline. R packages are installed by the user into a writable overlay (see CONTAINER.md), not baked in.
+    R_Version     4.5.0
+
+%help
+    Singularity/Apptainer container for the impact-analysis R pipeline.
+
+    This image provides R 4.5.0 (matching brainonfire) and all SYSTEM libraries
+    needed to COMPILE the pipeline's R packages (Seurat, Azimuth, the Immcantation
+    suite, DropletUtils, dsb, SoupX, harmony, edgeR/limma, impactSingleCellToolkit, ...).
+
+    The R packages themselves are NOT baked in. You install them once into a
+    persistent WRITABLE OVERLAY so they survive, and you can enter the container
+    later to add or upgrade packages. See CONTAINER.md for the exact commands.
+
+    A pipeline script is called with a JSON parameter file, e.g.:
+        apptainer run --overlay overlay.img \
+            --bind /data/rdandekar:/data/rdandekar \
+            impact-analysis.sif code/2_preprocessing_combined_object.R /path/to/input.json
+
+    Inputs and outputs live OUTSIDE the container on the bound host filesystem
+    (the paths inside your input.json), so the .sif stays read-only and portable.
+
+%environment
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+    # Overlay-backed personal library: R installs land here and persist in the overlay.
+    export R_LIBS_USER=/ext3/R-libs
+    # Repo lives here inside the image (added via %files at build time).
+    export IMPACT_HOME=/opt/impact-analysis
+    export PATH=/usr/local/bin:$PATH
+
+%files
+    # Copy the repository source INTO the image, read-only. (Additive: nothing in your repo is modified.)
+    # The build is run from the repo root, so '.' is the impact-analysis checkout.
+    . /opt/impact-analysis
+
+%post
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        build-essential gfortran \
+        libcurl4-openssl-dev libssl-dev libxml2-dev \
+        libhdf5-dev \
+        libpng-dev libjpeg-dev libtiff5-dev \
+        libfontconfig1-dev libfreetype6-dev libharfbuzz-dev libfribidi-dev \
+        libcairo2-dev libxt-dev \
+        zlib1g-dev libbz2-dev liblzma-dev \
+        libglpk-dev libgsl-dev \
+        libgeos-dev libgdal-dev libproj-dev \
+        libmagick++-dev \
+        libgit2-dev libuv1-dev \
+        pandoc \
+        git wget curl ca-certificates
+
+    # --- Install core R packages into the immutable SIF ---
+    Rscript -e 'install.packages(
+        c(
+            "Seurat", "tidyverse", "BiocManager", "remotes", "rjson",
+            "data.table", "harmony", "cowplot", "patchwork", "pheatmap",
+            "RColorBrewer", "reshape2", "viridis", "kableExtra", "statmod",
+            "stringr", "devtools", "gridExtra"
+        ),
+        repos = "https://cloud.r-project.org",
+        lib = "/usr/local/lib/R/site-library",
+        Ncpus = parallel::detectCores()
+    )'
+    
+    # --- Set Bioconductor version ---
+    Rscript -e 'BiocManager::install(
+        version = "3.21",
+        ask = FALSE,
+        update = FALSE
+    )'
+    
+    # --- Install Bioconductor packages ---
+    Rscript -e 'BiocManager::install(
+        c(
+            "SingleCellExperiment",
+            "DropletUtils",
+            "edgeR",
+            "limma",
+            "glmGamPoi",
+            "dittoSeq",
+            "SingleR",
+            "Biostrings",
+            "speckle",
+            "dsb",
+            "SoupX",
+            "celldex",
+            "ggtree"
+        ),
+        ask = FALSE,
+        update = FALSE,
+        lib = "/usr/local/lib/R/site-library"
+    )'
+    
+    # --- Install Immcantation packages ---
+    Rscript -e 'install.packages(
+        c(
+            "alakazam",
+            "shazam",
+            "tigger",
+            "dowser",
+            "airr"
+        ),
+        repos = "https://cloud.r-project.org",
+        lib = "/usr/local/lib/R/site-library",
+        Ncpus = parallel::detectCores()
+    )'
+    
+    # --- Install git packages ---
+    
+    # DoubletFinder
+    Rscript -e 'remotes::install_github(
+        "chris-mcginnis-ucsf/DoubletFinder",
+        lib = "/usr/local/lib/R/site-library",
+        force = TRUE,
+        upgrade = "never"
+    )'
+    # Azimuth
+    Rscript -e 'remotes::install_github(
+        "satijalab/azimuth",
+        ref = "master",
+        lib = "/usr/local/lib/R/site-library",
+        upgrade = "never"
+    )'
+    # SeuratData and test data
+    Rscript -e 'devtools::install_github(
+        "satijalab/seurat-data",
+        lib = "/usr/local/lib/R/site-library",
+        upgrade = "never"
+    )'
+    Rscript -e 'library(SeuratData); InstallData("pbmc3k")'
+    
+    # Custom R package
+    Rscript -e 'remotes::install_github(
+        "UCSF-Wilson-Lab/impactSingleCellToolkit",
+        lib = "/usr/local/lib/R/site-library",
+        upgrade = "never"
+    )'
+
+
+    rm -rf /var/lib/apt/lists/*
+
+    # --- Overlay mount point for additional user-installed R packages ---
+    mkdir -p /ext3/R-libs
+
+    # Make the repo world-readable inside the image.
+    chmod -R a+rX /opt/impact-analysis || true
+
+
+%runscript
+    # Usage: apptainer run [--overlay overlay.img] [--bind HOSTDIR] image.sif <script.R> <input.json> [extra args...]
+    # <script.R> is resolved relative to the repo root (/opt/impact-analysis) if not absolute.
+    if [ "$#" -lt 2 ]; then
+        echo "Usage: apptainer run [--overlay overlay.img] impact-analysis.sif <script.R> <input.json> [args...]" >&2
+        echo "Example: ... impact-analysis.sif code/2_preprocessing_combined_object.R /data/rdandekar/.../input.json" >&2
+        exit 2
+    fi
+    SCRIPT="$1"; shift
+    case "$SCRIPT" in
+        /*) : ;;                                   # absolute path, use as-is
+        *)  SCRIPT="$IMPACT_HOME/$SCRIPT" ;;        # relative to repo root in image
+    esac
+    exec Rscript "$SCRIPT" "$@"
+
+%apprun shell
+    # Convenience: 'apptainer run --app shell ...' drops into R so you can install packages.
+    exec R
+
+%test
+    set -e
+    echo "R version check:"
+    R --version | head -1
+    echo "R_LIBS_USER=$R_LIBS_USER"
+    Rscript -e 'cat("Rscript OK; .libPaths():\n"); print(.libPaths())'

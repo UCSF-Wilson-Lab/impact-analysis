@@ -1,0 +1,11 @@
+Apptainer notes
+===============
+
+# 1. Build
+apptainer build impact-analysis.sif impact-analysis.def
+
+# 2. Sanity check and enter the env (optional)
+apptainer shell impact-analysis.sif
+
+# 3. Test run container on R script that loads packages
+apptainer exec impact-analysis.sif Rscript test-packages.R 
