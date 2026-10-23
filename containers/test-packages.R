@@ -22,6 +22,7 @@ library(DoubletFinder)
 library(impactSingleCellToolkit)
 
 # Object Pre-processing and cell-type annotation
+library(SeuratData)
 library(Azimuth)
 
 cat(paste0('All packages successfully loaded\n'))

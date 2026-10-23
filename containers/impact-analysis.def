@@ -135,7 +135,7 @@ From: rocker/r-ver:4.5.0
         lib = "/usr/local/lib/R/site-library",
         upgrade = "never"
     )'
-    Rscript -e 'library(SeuratData); InstallData("pbmc3k")'
+    Rscript -e 'library(SeuratData); InstallData("pbmc3k"); InstallData("pbmcref")'
     
     # Custom R package
     Rscript -e 'remotes::install_github(
